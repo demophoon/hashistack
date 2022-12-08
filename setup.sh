@@ -56,6 +56,9 @@ tool() {
     download_tool "${_context}"
   fi
 }
+nomad() { tool; }
+consul() { tool; }
+vault() { tool; }
 
 with() {
   context=${1:?Context required}
@@ -113,7 +116,7 @@ setup_vault() {
   ( with "vault"
     echo "Starting Vault..."
     template vault.hcl.tpl vault.gen.hcl
-    background $(tool) server -dev -config=./vault.gen.hcl
+    background $(vault) server -dev -config=./vault.gen.hcl
     wait_for "http://127.0.0.1:8200/"
     echo "Vault has been started."
     echo "export VAULT_ADDR=http://127.0.0.1:8200"
@@ -128,8 +131,9 @@ setup_consul() {
     mkdir -p "data"
     mkdir -p "config"
     template consul.hcl.tpl config/consul.gen.hcl
-    background $(tool) agent -data-dir=data -dev -config-dir=./config
+    background $(consul) agent -data-dir=data -dev -config-dir=./config
     wait_for "http://127.0.0.1:8500/"
+    $(consul) acl bootstrap
     echo "Consul has been started."
   )
 }
@@ -141,7 +145,7 @@ setup_nomad() {
     export _vault_token=$(get_vault_token)
     template nomad.hcl.tpl nomad.gen.hcl
     download_cni_plugins
-    background $(tool) agent -dev-connect -bind 0.0.0.0 -log-level INFO -config nomad.gen.hcl
+    background $(nomad) agent -dev-connect -bind 0.0.0.0 -log-level INFO -config nomad.gen.hcl
     wait_for "http://127.0.0.1:4646/"
     echo "Nomad has been started."
   )

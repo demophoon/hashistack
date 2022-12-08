@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -e
 
@@ -26,9 +26,7 @@ _cleanup() {
   sudo rm -rf "${_context_dir:?}" ||:
 }
 
-
-if [ "$(basename $0)" = "destroy.sh" ]; then
-  sudo echo "has root" > /dev/null
+main() {
   services=(
     nomad
     consul
@@ -40,4 +38,13 @@ if [ "$(basename $0)" = "destroy.sh" ]; then
       _cleanup
     )
   done
+}
+
+if [ "$(basename $0)" = "destroy.sh" ]; then
+  if [ "$EUID" -ne 0 ]; then
+    echo "re-running with sudo..."
+    sudo "${0}"
+  else
+    main
+  fi
 fi
