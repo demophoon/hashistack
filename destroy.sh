@@ -4,6 +4,15 @@ set -e
 
 source ./setup.sh
 
+with_destroy() {
+  context=${1:?Context required}
+  with ${context:?}
+  if ! is_running; then
+    echo "${context:?} is not running... Have you ran setup.sh yet?"
+    exit 0
+  fi
+}
+
 wait_for_pid() {
   pid=${1:?}
   while kill -0 $pid 2> /dev/null; do
@@ -12,14 +21,10 @@ wait_for_pid() {
 }
 
 _kill() {
-  if [ -f ${_pid:?} ]; then
-    sudo kill $(cat ${_pid:?}) ||:
-    wait_for_pid ${_pid:?}
-    sudo rm -f "${_pid:?}"
-    echo "${_context} killed."
-  else
-    echo "${_context} not running... have you ran setup.sh yet?"
-  fi
+  sudo kill $(cat ${_pid:?}) ||:
+  wait_for_pid ${_pid:?}
+  sudo rm -f "${_pid:?}"
+  echo "${_context} killed."
 }
 
 _cleanup() {
@@ -33,7 +38,7 @@ main() {
     vault
   )
   for service in "${services[@]}"; do
-    ( with "${service:?}"
+    ( with_destroy "${service:?}"
       _kill
       _cleanup
     )

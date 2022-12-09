@@ -72,6 +72,19 @@ with() {
   cd "${_context_dir}"
 }
 
+with_setup() {
+  context=${1:?Context required}
+  with ${context:?}
+  if is_running; then
+    echo "${context:?} is already running."
+    exit 0
+  fi
+}
+
+is_running() {
+  [ -f ${_pid:?} ] && ps -p $(cat ${_pid}) > /dev/null
+}
+
 template() {
   in=${1:?Input file required}
   out=${2:?Output file required}
@@ -79,12 +92,12 @@ template() {
 }
 
 background() {
-    if [ -f ${_pid:?} ] && ps -p $(cat ${_pid}) > /dev/null; then
+    if is_running ; then
         echo "${_context:?} is already running."
         return 0
     fi
     cmd="${*:?Command required}"
-    ${cmd} &> ${_logs:?} &
+    sudo ${cmd} &> ${_logs:?} &
     pid=$!
     echo $pid > ${_pid:?}
 }
@@ -98,7 +111,7 @@ get_vault_token() {
 
 wait_for() {
   for i in {0..10}; do
-    if ! ps -p $(cat ${_pid}) > /dev/null; then
+    if ! is_running; then
       echo "Process not running..."
       cat ${_logs}
       return 1
@@ -113,7 +126,7 @@ wait_for() {
 }
 
 setup_vault() {
-  ( with "vault"
+  ( with_setup "vault"
     echo "Starting Vault..."
     template vault.hcl.tpl vault.gen.hcl
     background $(vault) server -dev -config=./vault.gen.hcl
@@ -126,7 +139,7 @@ setup_vault() {
 }
 
 setup_consul() {
-  ( with "consul"
+  ( with_setup "consul"
     echo "Starting Consul..."
     mkdir -p "data"
     mkdir -p "config"
@@ -139,13 +152,14 @@ setup_consul() {
 }
 
 setup_nomad() {
-  ( with "nomad"
+  ( with_setup "nomad"
     echo "Starting Nomad..."
     mkdir -p "data" "volumes/runner" "volumes/server"
+    sudo chmod 777 -R data
     export _vault_token=$(get_vault_token)
     template nomad.hcl.tpl nomad.gen.hcl
     download_cni_plugins
-    background $(nomad) agent -dev-connect -bind 0.0.0.0 -log-level INFO -config nomad.gen.hcl
+    background $(nomad) agent -dev-connect -bind 0.0.0.0 -log-level DEBUG -config nomad.gen.hcl
     wait_for "http://127.0.0.1:4646/"
     echo "Nomad has been started."
   )
