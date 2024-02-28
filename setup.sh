@@ -18,42 +18,17 @@ case $(uname -m) in
     ;;
 esac
 
-download_tool() {
+check_tool() {
   tool=${1:?Tool name required}
-  case ${tool} in
-    nomad)
-      version='1.4.3'
-      ;;
-    consul)
-      version='1.14.2'
-      ;;
-    vault)
-      version='1.12.2'
-      ;;
-    *)
-      echo "Automatic download of ${tool} not supported on this platform."
-      exit 1
-      ;;
-  esac
-  dl_url="https://releases.hashicorp.com/${tool:?}/${version:?}/${tool:?}_${version:?}_linux_${arch}.zip"
-  mkdir -p "${script_dir:?}/.cache"
-  dl_location="${script_dir:?}/.cache/${tool}-.zip"
-  if [ ! -f "${dl_location}" ]; then
-    curl -Lo "${dl_location:?}" "${dl_url}"
-  fi
-  bindir="${script_dir:?}/.cache/bin/${_context}"
-  if [ ! -x "${bindir}" ]; then
-    mkdir "${script_dir:?}/.cache/bin"
-    cd "${script_dir:?}/.cache/bin" && unzip "${dl_location:?}"
-  fi
-  echo ${bindir}
+  echo ${tool} is missing. Please install to continue
 }
 
 tool() {
   if which "${_context}" > /dev/null; then
     which "${_context}"
   else
-    download_tool "${_context}"
+    _var_name="_${_context}"
+    echo "${!_var_name}"
   fi
 }
 nomad() { tool; }
@@ -158,33 +133,15 @@ setup_nomad() {
     sudo chmod 777 -R data
     export _vault_token=$(get_vault_token)
     template nomad.hcl.tpl nomad.gen.hcl
-    download_cni_plugins
-    background $(nomad) agent -dev-connect -bind 0.0.0.0 -log-level DEBUG -config nomad.gen.hcl
+    background $(nomad) agent -bind 0.0.0.0 -log-level DEBUG -config nomad.gen.hcl
     wait_for "http://127.0.0.1:4646/"
     echo "Nomad has been started."
   )
 }
 
-download_cni_plugins() {
-  cni_version="1.1.1"
-  dl_location="${script_dir}/.cache/cni-plugins.tgz"
-  arch=$(uname -m)
-  case ${arch} in
-    aarch64)
-    arch="arm64"
-    ;;
-    x86_64)
-    arch="amd64"
-    ;;
-  esac
-  if [ ! -f "${dl_location:?}" ]; then
-    echo "Downloading CNI plugins..."
-    mkdir -p "${script_dir:?}/.cache"
-    curl -Lo "${dl_location:?}" "https://github.com/containernetworking/plugins/releases/download/v${cni_version}/cni-plugins-linux-${arch}-v${cni_version}.tgz"
-  fi
-  ( with "nomad"
-    mkdir -p "${_context_dir}/cni/bin"
-    cd "${_context_dir}/cni/bin" && tar -xzf "${dl_location:?}" ./
+setup_test() {
+  ( with_setup "consul"
+    echo $(consul)
   )
 }
 
@@ -197,8 +154,12 @@ main() {
 if [ "$(basename $0)" = "setup.sh" ]; then
   if [ "$EUID" -ne 0 ]; then
     echo "re-running with sudo..."
+    echo "export _consul=$(which consul)" > "${script_dir:?}/.env"
+    echo "export _nomad=$(which nomad)" >> "${script_dir:?}/.env"
+    echo "export _vault=$(which vault)" >> "${script_dir:?}/.env"
     sudo "${0}"
   else
+    source "${script_dir:?}/.env"
     main
   fi
 fi
